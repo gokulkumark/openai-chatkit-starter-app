@@ -11,9 +11,19 @@ export const STARTER_PROMPTS: StartScreenPrompt[] = [
     prompt: "What can you do?",
     icon: "circle-question",
   },
+  {
+    label: "Life Insurance Needs",
+    prompt: "Help me figure out how much life insurance I need",
+    icon: "lightbulb",
+  },
+  {
+    label: "Term vs. Whole Life",
+    prompt: "What's the difference between term and whole life?",
+    icon: "circle-question",
+  }
 ];
 
-export const PLACEHOLDER_INPUT = "Ask anything...";
+export const PLACEHOLDER_INPUT = "Type something like “I’m 35, married, with 2 kids and a mortgage...";
 
 export const GREETING = "How can I help you today?";
 
