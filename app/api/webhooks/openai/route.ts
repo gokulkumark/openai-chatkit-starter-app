@@ -37,9 +37,9 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   // Parse payload
-  let evt: Record<string, any> | null = null;
+  let evt: Record<string, unknown> | null = null;
   try {
-    evt = rawBody ? (JSON.parse(rawBody) as Record<string, any>) : null;
+    evt = rawBody ? (JSON.parse(rawBody) as Record<string, unknown>) : null;
   } catch {
     return json({ error: "Invalid JSON" }, 400);
   }
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   }
 
   // Only handle completion events (name varies; handle common cases)
-  const eventType: string = String(evt.type ?? evt.event ?? "");
+  const eventType: string = String((evt["type"] ?? evt["event"]) ?? "");
   if (!/completed/i.test(eventType)) {
     return json({ ok: true, ignored: true });
   }
@@ -74,9 +74,14 @@ export async function POST(request: NextRequest): Promise<Response> {
     // If no filter provided, accept all (or tighten if you prefer)
   }
 
-  const runId = String(evt.run_id ?? evt.run?.id ?? "");
+  const runId = String(
+    evt["run_id"] ?? (isObj(evt["run"]) ? (evt["run"] as Record<string, unknown>)["id"] : undefined) ?? ""
+  );
   const userId = String(
-    evt.user_id ?? evt.scope?.user_id ?? evt.run?.user_id ?? ""
+    evt["user_id"] ??
+      (isObj(evt["scope"]) ? (evt["scope"] as Record<string, unknown>)["user_id"] : undefined) ??
+      (isObj(evt["run"]) ? (evt["run"] as Record<string, unknown>)["user_id"] : undefined) ??
+      ""
   );
   const payloadData = extractAgentResult(evt);
 
@@ -117,29 +122,44 @@ function verifyHmacSha256(body: string, secret: string, provided: string): boole
   }
 }
 
-function extractAgent(evt: Record<string, any>): { id?: string; name?: string } | null {
+function isObj(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function extractAgent(evt: Record<string, unknown>): { id?: string; name?: string } | null {
   // Try several common shapes
-  const fromRoot = evt.agent || evt.target_agent || null;
-  if (fromRoot) return { id: fromRoot.id, name: fromRoot.name };
+  const rootAgent = isObj(evt["agent"]) ? (evt["agent"] as Record<string, unknown>) : null;
+  const targetAgent = isObj(evt["target_agent"]) ? (evt["target_agent"] as Record<string, unknown>) : null;
+  const fromRoot = rootAgent || targetAgent;
+  if (fromRoot) return { id: asString(fromRoot["id"]), name: asString(fromRoot["name"]) };
 
-  const fromStep = evt.step?.agent || evt.run?.last_step?.agent || null;
-  if (fromStep) return { id: fromStep.id, name: fromStep.name };
+  const step = isObj(evt["step"]) ? (evt["step"] as Record<string, unknown>) : null;
+  const run = isObj(evt["run"]) ? (evt["run"] as Record<string, unknown>) : null;
+  const lastStep = isObj(run?.["last_step"]) ? (run?.["last_step"] as Record<string, unknown>) : null;
+  const stepAgent = isObj(step?.["agent"]) ? (step?.["agent"] as Record<string, unknown>) : null;
+  const runLastStepAgent = isObj(lastStep?.["agent"]) ? (lastStep?.["agent"] as Record<string, unknown>) : null;
+  const fromStep = stepAgent || runLastStepAgent || null;
+  if (fromStep) return { id: asString(fromStep["id"]), name: asString(fromStep["name"]) };
 
-  const id = evt.agent_id ?? evt.step?.agent_id ?? evt.run?.agent_id;
-  const name = evt.agent_name ?? evt.step?.agent_name ?? evt.run?.agent_name;
-  if (id || name) return { id, name };
+  const id = (evt["agent_id"]) ?? (isObj(step) ? step["agent_id"] : undefined) ?? (isObj(run) ? run["agent_id"] : undefined);
+  const name = (evt["agent_name"]) ?? (isObj(step) ? step["agent_name"] : undefined) ?? (isObj(run) ? run["agent_name"] : undefined);
+  if (id || name) return { id: asString(id), name: asString(name) };
   return null;
 }
 
-function extractAgentResult(evt: Record<string, any>): unknown {
+function extractAgentResult(evt: Record<string, unknown>): unknown {
   // Common places where final payload may live
   return (
-    evt.result ??
-    evt.output ??
-    evt.data ??
-    evt.step?.result ??
-    evt.step?.output ??
-    evt.run?.result ??
+    evt["result"] ??
+    evt["output"] ??
+    evt["data"] ??
+    (isObj(evt["step"]) ? (evt["step"] as Record<string, unknown>)["result"] : undefined) ??
+    (isObj(evt["step"]) ? (evt["step"] as Record<string, unknown>)["output"] : undefined) ??
+    (isObj(evt["run"]) ? (evt["run"] as Record<string, unknown>)["result"] : undefined) ??
     null
   );
 }
