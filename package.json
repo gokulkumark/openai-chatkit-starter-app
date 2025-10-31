@@ -10,8 +10,6 @@
   },
   "dependencies": {
     "@openai/chatkit-react": ">=1.1.1 <2.0.0",
-    "google-auth-library": "^10.4.2",
-    "googleapis": "^164.1.0",
     "next": "^15.5.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
