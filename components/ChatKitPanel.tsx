@@ -333,14 +333,30 @@ export function ChatKitPanel({
   // Listen for messages from parent window (iframe communication)
   useEffect(() => {
     if (!isBrowser) {
+      console.log("[ChatKitPanel] Message listener not initialized: not in browser");
       return;
     }
 
+    console.log("[ChatKitPanel] Message listener initialized, waiting for messages from parent window");
+
     const handler = (event: MessageEvent) => {
-      if (event.origin !== "https://dksinsurance.com") return;
+      console.log("[ChatKitPanel] Message received:", {
+        origin: event.origin,
+        expectedOrigin: "https://dksinsurance.com",
+        data: event.data,
+        dataType: event.data?.type,
+      });
+
+      if (event.origin !== "https://dksinsurance.com") {
+        console.log("[ChatKitPanel] Origin mismatch, ignoring message. Expected:", "https://dksinsurance.com", "Got:", event.origin);
+        return;
+      }
+
+      console.log("[ChatKitPanel] Origin check passed");
 
       if (event.data?.type === "INIT_PROMPT") {
         const incomingPrompt = event.data.prompt;
+        console.log("[ChatKitPanel] INIT_PROMPT received:", incomingPrompt);
 
         // Put the text into the ChatKit input box
         // Access the web component via DOM query
@@ -350,30 +366,64 @@ export function ChatKitPanel({
           sendMessage?: (message: string) => void;
         }) | null;
 
+        console.log("[ChatKitPanel] ChatKit element found:", !!chatKitElement, {
+          hasFocusComposer: typeof chatKitElement?.focusComposer === "function",
+          hasSetInput: typeof chatKitElement?.setInput === "function",
+          hasSendMessage: typeof chatKitElement?.sendMessage === "function",
+          hasShadowRoot: !!chatKitElement?.shadowRoot,
+        });
+
         if (chatKitElement) {
           // Try to set input value directly if method exists
           if (typeof chatKitElement.setInput === "function") {
-            chatKitElement.setInput(incomingPrompt);
+            console.log("[ChatKitPanel] Using setInput method");
+            try {
+              chatKitElement.setInput(incomingPrompt);
+              console.log("[ChatKitPanel] setInput called successfully");
+            } catch (error) {
+              console.error("[ChatKitPanel] Error calling setInput:", error);
+            }
           } else {
+            console.log("[ChatKitPanel] setInput not available, using DOM fallback");
             // Fallback: focus composer and set value via DOM
-            chatKitElement.focusComposer?.();
-            const input = (chatKitElement.shadowRoot as ShadowRoot | null)?.querySelector("textarea, input[type='text']") as HTMLTextAreaElement | HTMLInputElement | null;
-            if (input) {
-              input.value = incomingPrompt;
-              input.dispatchEvent(new Event("input", { bubbles: true }));
+            try {
+              chatKitElement.focusComposer?.();
+              console.log("[ChatKitPanel] focusComposer called");
+              
+              const input = (chatKitElement.shadowRoot as ShadowRoot | null)?.querySelector("textarea, input[type='text']") as HTMLTextAreaElement | HTMLInputElement | null;
+              console.log("[ChatKitPanel] Input element found in shadow DOM:", !!input);
+              
+              if (input) {
+                input.value = incomingPrompt;
+                input.dispatchEvent(new Event("input", { bubbles: true }));
+                console.log("[ChatKitPanel] Input value set via DOM, value:", input.value);
+              } else {
+                console.warn("[ChatKitPanel] Could not find input element in shadow DOM");
+              }
+            } catch (error) {
+              console.error("[ChatKitPanel] Error in DOM fallback:", error);
             }
           }
+        } else {
+          console.warn("[ChatKitPanel] ChatKit element not found in DOM");
         }
 
         // Optional: auto-send it
         // if (chatKitElement && typeof chatKitElement.sendMessage === "function") {
         //   chatKitElement.sendMessage(incomingPrompt);
         // }
+      } else {
+        console.log("[ChatKitPanel] Message type not INIT_PROMPT, ignoring. Type was:", event.data?.type);
       }
     };
 
     window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
+    console.log("[ChatKitPanel] Message event listener added");
+    
+    return () => {
+      window.removeEventListener("message", handler);
+      console.log("[ChatKitPanel] Message event listener removed");
+    };
   }, []);
 
   const activeError = errors.session ?? errors.integration;
