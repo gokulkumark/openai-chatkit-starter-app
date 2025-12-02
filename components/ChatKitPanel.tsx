@@ -330,6 +330,52 @@ export function ChatKitPanel({
     },
   });
 
+  // Listen for messages from parent window (iframe communication)
+  useEffect(() => {
+    if (!isBrowser) {
+      return;
+    }
+
+    const handler = (event: MessageEvent) => {
+      if (event.origin !== "https://dksinsurance.com") return;
+
+      if (event.data?.type === "INIT_PROMPT") {
+        const incomingPrompt = event.data.prompt;
+
+        // Put the text into the ChatKit input box
+        // Access the web component via DOM query
+        const chatKitElement = document.querySelector("openai-chatkit") as (HTMLElement & {
+          focusComposer?: () => void;
+          setInput?: (value: string) => void;
+          sendMessage?: (message: string) => void;
+        }) | null;
+
+        if (chatKitElement) {
+          // Try to set input value directly if method exists
+          if (typeof chatKitElement.setInput === "function") {
+            chatKitElement.setInput(incomingPrompt);
+          } else {
+            // Fallback: focus composer and set value via DOM
+            chatKitElement.focusComposer?.();
+            const input = (chatKitElement.shadowRoot as ShadowRoot | null)?.querySelector("textarea, input[type='text']") as HTMLTextAreaElement | HTMLInputElement | null;
+            if (input) {
+              input.value = incomingPrompt;
+              input.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+          }
+        }
+
+        // Optional: auto-send it
+        // if (chatKitElement && typeof chatKitElement.sendMessage === "function") {
+        //   chatKitElement.sendMessage(incomingPrompt);
+        // }
+      }
+    };
+
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
   const activeError = errors.session ?? errors.integration;
   const blockingError = errors.script ?? activeError;
 
