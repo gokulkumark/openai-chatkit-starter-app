@@ -358,23 +358,23 @@ export function ChatKitPanel({
         const incomingPrompt = event.data.prompt;
         console.log("[ChatKitPanel] INIT_PROMPT received:", incomingPrompt);
 
-        // Try to set input using ChatKit control if available
+        // Use setComposerValue to set the prompt in the ChatKit composer
         const chatKitElement = document.querySelector("openai-chatkit") as (HTMLElement & {
-          setInput?: (value: string) => void;
+          setComposerValue?: (params: { text: string }) => Promise<void>;
         }) | null;
 
         console.log("[ChatKitPanel] ChatKit element found:", !!chatKitElement);
-        console.log("[ChatKitPanel] ChatKit element has setInput method:", typeof chatKitElement?.setInput === "function");
+        console.log("[ChatKitPanel] ChatKit element has setComposerValue method:", typeof chatKitElement?.setComposerValue === "function");
 
-        if (chatKitElement?.setInput) {
+        if (chatKitElement?.setComposerValue) {
           try {
-            chatKitElement.setInput(incomingPrompt);
-            console.log("[ChatKitPanel] setInput called successfully with prompt:", incomingPrompt);
+            chatKitElement.setComposerValue({ text: incomingPrompt });
+            console.log("[ChatKitPanel] setComposerValue called successfully with prompt:", incomingPrompt);
           } catch (error) {
-            console.error("[ChatKitPanel] Error calling setInput:", error);
+            console.error("[ChatKitPanel] Error calling setComposerValue:", error);
           }
         } else {
-          console.warn("[ChatKitPanel] setInput method not available on ChatKit element");
+          console.warn("[ChatKitPanel] setComposerValue method not available on ChatKit element");
           console.log("[ChatKitPanel] Available methods on ChatKit element:", Object.keys(chatKitElement || {}));
         }
       } else {
