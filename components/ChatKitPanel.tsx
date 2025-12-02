@@ -390,15 +390,115 @@ export function ChatKitPanel({
               chatKitElement.focusComposer?.();
               console.log("[ChatKitPanel] focusComposer called");
               
-              const input = (chatKitElement.shadowRoot as ShadowRoot | null)?.querySelector("textarea, input[type='text']") as HTMLTextAreaElement | HTMLInputElement | null;
-              console.log("[ChatKitPanel] Input element found in shadow DOM:", !!input);
+              // Helper function to search for input in shadow DOM (including nested shadow roots)
+              const findInputInShadowRoot = (root: ShadowRoot | Document | Element, depth = 0): HTMLTextAreaElement | HTMLInputElement | HTMLElement | null => {
+                if (depth > 3) return null; // Prevent infinite recursion
+                
+                // Try multiple selectors
+                const selectors = [
+                  "textarea",
+                  "input[type='text']",
+                  "input",
+                  "[contenteditable='true']",
+                  "[role='textbox']",
+                  ".composer textarea",
+                  ".composer input",
+                  "[data-composer] textarea",
+                  "[data-composer] input",
+                  "div[contenteditable]",
+                ];
+                
+                for (const selector of selectors) {
+                  const element = root.querySelector(selector) as HTMLElement | null;
+                  if (element) {
+                    if (element.tagName === "TEXTAREA" || element.tagName === "INPUT") {
+                      return element;
+                    }
+                    // Also check for contenteditable divs
+                    if (element.isContentEditable || element.getAttribute("contenteditable") === "true") {
+                      return element;
+                    }
+                  }
+                }
+                
+                // Search in nested shadow roots
+                const allElements = root.querySelectorAll("*");
+                for (const el of allElements) {
+                  if (el.shadowRoot) {
+                    const found = findInputInShadowRoot(el.shadowRoot, depth + 1);
+                    if (found) return found;
+                  }
+                }
+                
+                return null;
+              };
               
-              if (input) {
-                input.value = incomingPrompt;
-                input.dispatchEvent(new Event("input", { bubbles: true }));
-                console.log("[ChatKitPanel] Input value set via DOM, value:", input.value);
+              // Helper to set value on any element type
+              const setElementValue = (element: HTMLElement, value: string) => {
+                if (element.tagName === "TEXTAREA" || element.tagName === "INPUT") {
+                  (element as HTMLTextAreaElement | HTMLInputElement).value = value;
+                  element.dispatchEvent(new Event("input", { bubbles: true }));
+                  element.dispatchEvent(new Event("change", { bubbles: true }));
+                } else if (element.isContentEditable || element.getAttribute("contenteditable") === "true") {
+                  element.textContent = value;
+                  element.dispatchEvent(new Event("input", { bubbles: true }));
+                }
+              };
+              
+              // Try to find input immediately
+              let input = chatKitElement.shadowRoot 
+                ? findInputInShadowRoot(chatKitElement.shadowRoot)
+                : null;
+              
+              console.log("[ChatKitPanel] Input element found in shadow DOM (immediate):", !!input, input?.tagName);
+              
+              // If not found, wait a bit and try again (element might not be ready)
+              if (!input) {
+                console.log("[ChatKitPanel] Input not found immediately, retrying with delays...");
+                
+                // Try multiple times with increasing delays
+                const tryFindInput = (attempt: number, maxAttempts = 5) => {
+                  setTimeout(() => {
+                    input = chatKitElement.shadowRoot 
+                      ? findInputInShadowRoot(chatKitElement.shadowRoot)
+                      : null;
+                    
+                    console.log(`[ChatKitPanel] Input element found in shadow DOM (attempt ${attempt}):`, !!input, input?.tagName);
+                    
+                    if (input) {
+                      setElementValue(input, incomingPrompt);
+                      console.log("[ChatKitPanel] Input value set via DOM (retry), value:", 
+                        input.tagName === "TEXTAREA" || input.tagName === "INPUT" 
+                          ? (input as HTMLTextAreaElement | HTMLInputElement).value 
+                          : input.textContent);
+                    } else if (attempt < maxAttempts) {
+                      tryFindInput(attempt + 1, maxAttempts);
+                    } else {
+                      console.warn("[ChatKitPanel] Could not find input element in shadow DOM after all retries");
+                      // Log shadow DOM structure for debugging
+                      if (chatKitElement.shadowRoot) {
+                        const html = chatKitElement.shadowRoot.innerHTML;
+                        console.log("[ChatKitPanel] Shadow DOM structure (first 1000 chars):", html.substring(0, 1000));
+                        // Also try to find any elements that might be inputs
+                        const allTextareas = chatKitElement.shadowRoot.querySelectorAll("textarea, input, [contenteditable]");
+                        console.log("[ChatKitPanel] Found potential input elements:", allTextareas.length, Array.from(allTextareas).map(el => ({
+                          tag: el.tagName,
+                          type: el.getAttribute("type"),
+                          contenteditable: el.getAttribute("contenteditable"),
+                          role: el.getAttribute("role"),
+                        })));
+                      }
+                    }
+                  }, attempt * 100); // 100ms, 200ms, 300ms, etc.
+                };
+                
+                tryFindInput(1);
               } else {
-                console.warn("[ChatKitPanel] Could not find input element in shadow DOM");
+                setElementValue(input, incomingPrompt);
+                console.log("[ChatKitPanel] Input value set via DOM, value:", 
+                  input.tagName === "TEXTAREA" || input.tagName === "INPUT" 
+                    ? (input as HTMLTextAreaElement | HTMLInputElement).value 
+                    : input.textContent);
               }
             } catch (error) {
               console.error("[ChatKitPanel] Error in DOM fallback:", error);
